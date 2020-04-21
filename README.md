@@ -3,11 +3,11 @@
 
 ## Table of Contents
 
-* [Project Introduction](#project-introduction)
-* [Technologies](#technologies)
-* [Data Source](#data-source)
-* [Design of sparkifydb Database](#design-of-sparkifydb-database)
-* [Files Launch & ETL Pipeline](#files-launch-&-etl-pipeline)
+1. [Project Introduction](#project-introduction)
+2. [Technologies](#technologies)
+3. [Input & Output Data](#input-&output-data)
+4. [Design of sparkifydb Database](#design-of-sparkifydb-database)
+5. [Files Launch & ETL Pipeline](#files-launch-&-etl-pipeline)
 
 
 ## 1. Project Introduction
@@ -31,91 +31,85 @@ so-called stagings tables to be prepared for further data ingesting. The fact + 
 * Driver: python3
 * API: pyspark
 
-### Note:
-Because the Redshift inserts data in columnar way, the conventional methods to avoid conflicts, especially duplicated rows should be changed.
-Using 
-! insert into target_table
-! select distinct col1, col2, col3
-! from source_table
-should cover the most problems which could be solved with "on conflict do nothing" in local databases.
-In order to do UPSERT one can refer the trick by the query "user_table_insert" in sql_queries.py.
 
+## 3. Input & Output Data
 
-## 3. Data Source
+### 3.1 Data directories:
 
+#### Input:
+* Song data: s3a://udacity-dend/song_data
+
+Song data pattern:  
+![Song data pattern](/song_data_pattern.JPG)
+
+Song data schema:  
+![Song data schema](/song_data_schema.JPG)
+
+* Log data: s3a://udacity-dend/log_data  
+Log data schema:  
+![Log data schema](/song_data_schema.JPG)
+
+#### Output:
+* S3 bucket: s3a://zhonglin-s3-bucket/project4tables/  
+
+### 3.2 Data Description
+
+#### Input data:
 * Format: .json
 * Song data: detailed infos about available songs and corresponding artists are included.
 * Log data: detailed infos about users and their music listening behaviours are included.
 
-### Data directories:
-#### Input:
-* Song data: s3a://udacity-dend/song_data
-* Log data: s3a://udacity-dend/log_data
-#### Output:
-* S3 bucket: s3a://zhonglin-s3-bucket/project4tables/
-
-There are duplicates in data, which can be prevented with sql insert "on conflict do nothing" commando.
+#### Output data:
+* Format: parquet
+* Fact table: songplays - all logs about the songplays
+* Dimension tables: songs, artists, users, time
 
 
 ## 4. Design of sparkifydb Database
 
-The database has the star schema:
-- fact table --> songplays table
-- dimension tables --> users, songs, artists & time tables
+The target database has the star schema:
+- fact table --> songplays table  
+- dimension tables --> users, songs, artists & time tables  
 
 
-## 5. Files Launch & ETL Pipeline
+## 5. File Launch & ETL Pipeline
 
-Execution sequence: sql_queries.py --> create_tables.py --> etl.py
+Execute etl.py directly
 
-### 5.1 file sql_queries.py
+### 5.1 etl.py
 
-contains the order strings of the table creation, insertation and search queries.
+contains the funtions to execute copy raw data from S3, processing with Apache Spark & insert into S3 
+fact + dimension tables.
 
-#### drop_table_queries:
+#### 5.1.1 main()
 
-Drop tables if they already exist.
+Assign variables
+input: song & log data from udacity
+output: my own aws s3 bucket
 
-#### create_table_queries:
+#### 5.1.2 create_spark_session()
 
-Create empty stagings and fact + dimension tables and define their conditions such as primary key, distkey & sortkey
+create a sparksession instance
 
-#### insert_table_queries:
+#### 5.1.3 process_song_data(spark, input_data, output_data)
+read, process & load song & artist data
 
-Insert data from staging tables into fact & dimension tables
+* read song data from aws s3
+* create songs & artists dimension tables from read dataset
+* write these 2 tables to target s3
 
-* about insert into songplays table:
-Note that the staging_event_table & staging_song_table should be left joined together when creating the fact table songplays.
-Because I am not sure if all relevant song infos are stored in S3, so it is still defined that only logs which are assigned with
-songid and artistid are kept for the songplays table.
-* about insert into users table:
-The users table should store the latest level information of the users. Thus the level info of the last user log record should be
-considered as the current level status. Concret query referred to query: user_table_insert
+args: spark - sparksession, input_data - input data directory, output_data - output data directory
 
-### 5.2 create_tables.py
+#### 5.1.4 test_tables()
+read, process & load user, playing time & songplay data
 
-drops and creats the tables for a new start to run the etl pipeline (using drop & create queries from sql_queries.py).
+* read log data from aws s3
+* create time & users dimension tables from read dataset
+* create songplays fact table from joined datasets
+* write these 3 tables to target s3
 
-### 5.3 etl.py
+args: spark - sparksession, input_data - input data directory, output_data - output data directory
 
-contains the funtions to execute copy to staging tables & insert into fact + dimension tables.
+### 5.2 dwh.cfg
 
-#### 5.3.1 main()
-
-connects to Redshift cluster and execute load & insert queries
-
-#### 5.3.2 loading_staging_tables()
-
-Load logs & song data from S3 into staging tables
-
-#### 5.3.3 insert_tables()
-
-Insert (transformed) corresponding columns from staging table into destination tables in Redshift
-
-#### 5.3.4 test_tables()
-
-Show table row number  and the first 5 records of each table
-
-### 5.4 dwh.cfg
-
-stores the access data to S3 storage and Redshift cluster.
+stores the access data to AWS user: AWS_ACCESS_KEY_ID & AWS_SECRET_ACCESS_KEY
