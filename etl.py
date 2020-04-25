@@ -125,8 +125,8 @@ def process_log_data(spark, input_data, output_data):
 
     # extract columns to create time table
     time_table = spark.sql('''
-        select distinct
-            new_ts as start_time,
+        select 
+            distinct on (new_ts as start_time),
             hour(new_ts) as hour,
             dayofmonth(new_ts) as day,
             weekofyear(new_ts) as week,
